@@ -1,0 +1,157 @@
+---
+title: "Análisis Algoritmo Apriori"
+author: "Carlos Andrés Gómez"
+date: '`r format(Sys.Date(), "%B %Y")`'
+output: 
+  prettydoc::html_pretty:
+    df_print: paged
+    theme: architect
+    highlight: github
+    text-align: center
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+options(scipen=999)
+
+# Librerias necesarias para el trabajo
+library(arules)
+library(arulesViz)
+library(tidyverse)
+library(readxl)
+library(knitr)
+library(ggplot2)
+library(lubridate)
+library(plyr)
+library(readxl)
+
+setwd("C:\\Users\\USUARIO\\Desktop\\Reglas de asociacion1\\Proyecto-reglas-asociacion")
+```
+
+<div class=text-justify>
+
+### Se obtienen los datos a analizar
+
+```{r message=FALSE, warning=FALSE}
+filedata <- "https://raw.githubusercontent.com/rociochavezmx/Rocio-Chavez-youtube-Files/master/Datos%20Compras.csv"
+
+if(!file.exists("DatosCompras.csv")){
+     download.file(filedata, destfile = "DatosCompras.csv")
+}
+
+```
+
+### Se lee el archivo a analizar
+
+```{r message=FALSE, warning=FALSE}
+datos_Apriori <- read.csv("DatosCompras.csv", sep = ",", dec = ".", header = TRUE)
+
+datos_Apriori <- datos_Apriori %>% mutate(Producto = as.factor(Producto))
+```
+
+## *Selección de registros completos*
+
+```{r message=FALSE, warning=FALSE}
+datos_Apriori1 <- datos_Apriori[complete.cases(datos_Apriori), ]
+```
+
+## *Creación de subset de datos para las transacciones*
+```{r message=FALSE, warning=FALSE}
+transacciones <- ddply(datos_Apriori1,c("Transaccion"),
+                       function(df1)paste(df1$Producto,
+                                          collapse = ","))
+
+transacciones$Transaccion <- NULL
+```
+
+## Se guarda la DB transformada como CSV
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+write.csv(transacciones,"transacciones.csv", quote = FALSE, row.names = FALSE)
+tr <- read.transactions("transacciones.csv", format = 'basket', sep=',', header = TRUE)
+```
+
+## Desplegamos las transacciones en consola
+
+```{r message=FALSE, warning=FALSE}
+inspect(tr)
+```
+
+## Se grafican los productos que más se han vendido
+
+```{r message=FALSE, warning=FALSE}
+itemFrequencyPlot(tr, topN = 10, type = 'absolute')
+```
+
+## **Aplicación del algoritmo `Apriori` para hallar las reglas de asociación
+
+```{r message=FALSE, warning=FALSE}
+reglas_asociacion <- apriori(tr, parameter = list(supp=0.1, conf=0.7, minlen=2))
+```
+
+## Se organizan las reglas en orden descendente
+
+```{r message=FALSE, warning=FALSE}
+reglas_asociacion <- sort(reglas_asociacion, by = "confidence", decreasing = TRUE)
+```
+
+## Se muestran las reglas de asociación creadas a partir del algoritmo Apriori
+
+```{r message=FALSE, warning=FALSE}
+inspect(reglas_asociacion)
+```
+
+## Se revisa si existen reglas duplicadas
+
+```{r message=FALSE, warning=FALSE}
+duplicated(reglas_asociacion)
+```
+
+## Se verifica si existen reglas redundantes
+
+```{r message=FALSE, warning=FALSE}
+reglas_redundantes <- is.redundant(reglas_asociacion)
+```
+
+## Se muestran las reglas que son redundantes
+
+```{r message=FALSE, warning=FALSE}
+which(is.redundant(reglas_asociacion))
+```
+
+## Se eliminan las reglas que son redundantes
+
+```{r message=FALSE, warning=FALSE}
+reglas_podadas <- reglas_asociacion[!reglas_redundantes]
+```
+
+## Se muestran las reglas podadas
+
+```{r message=FALSE, warning=FALSE}
+inspect(reglas_podadas, by = "confidence")
+```
+
+## *Red de Reglas de asociación con el algoritmo Apriori*
+
+```{r message=FALSE, warning=FALSE}
+plot(reglas_podadas, method = "graph",  engine = "interactive", shading = "confidence")
+```
+
+## *Se agregan los indicadores Leverage y Conviction*
+
+```{r message=FALSE, warning=FALSE}
+quality(reglas_podadas) <- cbind(quality(reglas_podadas), leverage = interestMeasure(reglas_podadas, measure = "leverage", transactions = tr), conviction = interestMeasure(reglas_podadas, measure = "conviction", transactions = tr))
+
+inspect(reglas_podadas, by = "confidence")
+```
+
+## Se preparan y se guardan las reglas para ser almacenadas
+```{r message=FALSE, warning=FALSE}
+productos_frecuentes <- data.frame(Productos = labels(reglas_podadas), 
+                                  Indicador = reglas_podadas@quality)
+
+
+write.csv(productos_frecuentes, "productos_frecuentes.csv")
+```
+</div>
